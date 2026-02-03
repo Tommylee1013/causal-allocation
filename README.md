@@ -26,15 +26,20 @@ Financial markets are not just sets of numbers; they are complex, adaptive syste
 To ensure the integrity of the causal signals, we must handle the stationarity-memory trade-off and filter out spurious correlations.
 
 * **Fractional Differentiation**: Maintain long-term memory while achieving stationarity.
-    $$\Delta^d P_t = \sum_{k=0}^{\infty} \binom{d}{k} (-1)^k P_{t-k}$$
+    
+$$\Delta^d P_t = \sum_{k=0}^{\infty} \binom{d}{k} (-1)^k P_{t-k}$$
+
 * **Marchenko-Pastur Denoising**: Filter the correlation matrix $C$ by replacing eigenvalues $\lambda$ that fall below the theoretical noise threshold:
-    $$\lambda_{max} = \sigma^2 (1 + \sqrt{\gamma})^2, \quad \text{where } \gamma = N/T$$
+
+$$\lambda_{max} = \sigma^2 (1 + \sqrt{\gamma})^2, \quad \text{where } \gamma = N/T$$
 
 #### Phase 2: Non-Linear Hierarchical Clustering
 Traditional correlation fails to capture complex dependencies. We use Information Theory to structure the 1,000+ asset universe.
 
 * **Variation of Information (VI)**: A true metric distance based on Mutual Information $I(X; Y)$.
-    $$d(X, Y) = \sqrt{1 - \frac{I(X; Y)}{\max(H(X), H(Y))}}$$
+
+$$d(X, Y) = \sqrt{1 - \frac{I(X; Y)}{\max(H(X), H(Y))}}$$
+
 * **HCAA (Hierarchical Cluster Asset Allocation)**: Group assets into $K$ clusters (e.g., $K \in [20, 50]$) based on the distance matrix $D$.
 
 #### Phase 3: Node Aggregation via Cluster-PCA
@@ -42,24 +47,32 @@ To reduce the dimensionality for the DAG search, we condense each cluster into a
 
 * **Cluster Representation**: For each cluster $C_k$, extract the subset of returns $R_{C_k}$.
 * **First Principal Component ($PC_1$)**: Extract the dominant signal that explains the maximum variance within the cluster:
-    $$Z_k = \mathbf{w}_1^T R_{C_k}$$
-    $Z_k$ now serves as the representative time-series for the $k$-th causal node.
+
+$$Z_k = \mathbf{w}_1^T R_{C_k}$$
+
+$Z_k$ now serves as the representative time-series for the $k$-th causal node.
 
 #### Phase 4: Causal Discovery (DAG Construction)
 We identify the directional flow of information between the aggregated cluster nodes.
 
 * **NOTEARS (Non-combinatorial Optimization)**: Learn the adjacency matrix $W$ by solving:
-    $$\min_{W} \frac{1}{2n} \|Z - ZW\|^2_F + \rho \|W\|_1 \quad \text{s.t. } \text{tr}(e^{W \circ W}) - K = 0$$
+
+$$\min_{W} \frac{1}{2n} \|Z - ZW\|^2_F + \rho \|W\|_1 \quad \text{s.t. } \text{tr}(e^{W \circ W}) - K = 0$$
+
+
 * **Dynamic Extension**: Incorporate time-lagged effects to capture lead-lag relationships:
-    $$Z_t = W_0^T Z_t + \sum_{\tau=1}^p W_\tau^T Z_{t-\tau} + \epsilon_t$$
+
+$$Z_t = W_0^T Z_t + \sum_{\tau=1}^p W_\tau^T Z_{t-\tau} + \epsilon_t$$
 
 #### Phase 5: Causal Intervention (Do-calculus)
 This step allows the manager to inject subjective views into the objective causal structure.
 
 * **Structural Intervention**: Apply the do-operator to node $j$ with value $v$: $do(Z_j = v)$.
 * **Total Causal Effect**: Calculate the propagation of the shock using the transfer matrix $T$:
-    $$T = (I - W_0^T)^{-1}$$
-    $$\tilde{\mu}_{causal} = T \cdot \mathbf{v}_{view}$$
+
+$$T = (I - W_0^T)^{-1}$$
+$$\tilde{\mu}_{causal} = T \cdot \mathbf{v}_{view}$$
+
 * **Path Analysis**: Quantify how the intervention at the source node affects downstream assets over the investment horizon $H$.
 
 #### Phase 6: Optimization via Causal-HRP
@@ -67,9 +80,12 @@ The final weights are calculated by merging the HRP risk-distribution with the c
 
 * **Recursive Bisection**: Split the cluster tree into left ($L$) and right ($R$) branches.
 * **Causal Weight Tilting**: Adjust the allocation factor $\alpha$ based on the causal expected returns $\tilde{\mu}$:
-    $$\alpha^* = \alpha_{IVP} \times \left( 1 + \lambda \frac{\tilde{\mu}_L - \tilde{\mu}_R}{|\tilde{\mu}_L| + |\tilde{\mu}_R|} \right)$$
+
+$$\alpha^* = \alpha_{IVP} \times \left( 1 + \lambda \frac{\tilde{\mu}_L - \tilde{\mu}_R}{|\tilde{\mu}_L| + |\tilde{\mu}_R|} \right)$$
+
 * **Final Allocation**: The weight for asset $i$ is the product of all adjusted factors along its path:
-    $$w_i = \prod_{n \in \text{path}(i)} \alpha_n^*$$
+
+$$w_i = \prod_{n \in \text{path}(i)} \alpha_n^*$$
 
 ### 🏷️ Keywords
 `Causal Inference` · `Directed Acyclic Graphs (DAG)` · `Hierarchical Risk Parity (HRP)` · `Information Theory` · `Mutual Information` · `Machine Learning for Finance` · `Structural Causal Models (SCM)` · `Portfolio Optimization` · `NOTEARS Algorithm` · `Denoising` · `Marchenko-Pastur Law`
