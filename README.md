@@ -22,25 +22,27 @@ Financial markets are not just sets of numbers; they are complex, adaptive syste
 
 ### Research Procedure: Causal-Inference Based Portfolio Optimization
 
-#### Phase 1: Data Preprocessing & Statistical Denoising
-To ensure the integrity of the causal signals, we must handle the stationarity-memory trade-off and filter out spurious correlations.
+#### Phase 1: Adaptive Data Preprocessing & Statistical Denoising
+To extract genuine causal signals from noisy financial time series, we implement a memory-preserving stationarity transformation followed by spectral filtering.
 
-* **Fractional Differentiation**: Maintain long-term memory while achieving stationarity.
-    
-$$\Delta^d P_t = \sum_{k=0}^{\infty} \binom{d}{k} (-1)^k P_{t-k}$$
+* **Global Fractional Differentiation**: Instead of simple integer differencing, we apply fractional differentiation to maintain long-term memory while ensuring stationarity. To maintain cross-sectional consistency, we compute the optimal $d$ for each asset and select the **95th percentile value** ($d_{95\%}$) to be applied across the entire universe:
+    $$\Delta^d P_t = \sum_{k=0}^{\infty} \binom{d}{k} (-1)^k P_{t-k}$$
 
-* **Marchenko-Pastur Denoising**: Filter the correlation matrix $C$ by replacing eigenvalues $\lambda$ that fall below the theoretical noise threshold:
+* **Spectral Matrix Cleaning (Denoising & Detoning)**: We transform the Variation of Information (VI) distance into a similarity matrix ($S = 1 - D$). This matrix undergoes a two-stage refinement:
+1.  **Marchenko-Pastur Denoising**: We filter the eigenvalues $\lambda$ of the correlation matrix that fall within the "noise" band defined by the theoretical threshold:
 
 $$\lambda_{max} = \sigma^2 (1 + \sqrt{\gamma})^2, \quad \text{where } \gamma = N/T$$
 
-#### Phase 2: Non-Linear Hierarchical Clustering
-Traditional correlation fails to capture complex dependencies. We use Information Theory to structure the 1,000+ asset universe.
+2.  **Detoning**: We remove the first principal component (the "Market Tone") to prevent common market-wide fluctuations from distorting the underlying cluster structures and causal discovery.
 
-* **Variation of Information (VI)**: A true metric distance based on Mutual Information $I(X; Y)$.
+#### Phase 2: Information-Theoretic Hierarchical Structuring
+Traditional Pearson correlation often misses non-linear dependencies. We utilize Information Theory to map the topology of the 1,000+ asset universe.
+
+* **Variation of Information (VI)**: We calculate a true metric distance based on Mutual Information $I(X; Y)$, which captures non-linear associations that standard correlation ignores:
 
 $$d(X, Y) = \sqrt{1 - \frac{I(X; Y)}{\max(H(X), H(Y))}}$$
 
-* **HCAA (Hierarchical Cluster Asset Allocation)**: Group assets into $K$ clusters (e.g., $K \in [20, 50]$) based on the distance matrix $D$.
+* **HCAA (Hierarchical Cluster Asset Allocation)**: Using the denoised and detoned similarity weights, assets are grouped into $K$ hierarchical clusters (typically $K \in [20, 50]$). This creates a recursive tree structure that serves as the backbone for the Causal Allocation, ensuring that capital is distributed across statistically independent risk factors rather than just individual tickers.
 
 #### Phase 3: Node Aggregation via Cluster-PCA
 To reduce the dimensionality for the DAG search, we condense each cluster into a single "Latent Causal Node."
