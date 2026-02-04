@@ -25,7 +25,7 @@ Financial markets are not just sets of numbers; they are complex, adaptive syste
 #### Phase 1: Adaptive Data Preprocessing & Statistical Denoising
 To extract genuine causal signals from noisy financial time series, we implement a memory-preserving stationarity transformation followed by spectral filtering.
 
-* **Global Fractional Differentiation**: Instead of simple integer differencing, we apply fractional differentiation to maintain long-term memory while ensuring stationarity. To maintain cross-sectional consistency, we compute the optimal $d$ for each asset and select the **95th percentile value** ($d_{95\%}$) to be applied across the entire universe:
+* **Global Fractional Differentiation**: Instead of simple integer differencing, we apply fractional differentiation to maintain long-term memory while ensuring stationarity. To maintain cross-sectional consistency, we compute the optimal $d$ for each asset and select the **95th percentile value** to be applied across the entire universe:
     $$\Delta^d P_t = \sum_{k=0}^{\infty} \binom{d}{k} (-1)^k P_{t-k}$$
 
 * **Spectral Matrix Cleaning (Denoising & Detoning)**: We transform the Variation of Information (VI) distance into a similarity matrix ($S = 1 - D$). This matrix undergoes a two-stage refinement:
