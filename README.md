@@ -5,7 +5,7 @@
 ### 🚀 Research Overview
 Traditional portfolio optimization (e.g., Markowitz, Black-Litterman) relies heavily on **Pearson correlation matrices**, which notoriously collapse during market crises and offer zero explainability. This project introduces a structural paradigm shift in asset allocation by integrating **Information Theory** and **Differentiable Causal Discovery**.
 
-Inspired by the work of **Marcos López de Prado**, this framework moves beyond "what moves together" to "what causes what." By extracting a **Directed Acyclic Graph (DAG)** from 1,000+ assets, we identify the underlying structural drivers of the market.
+Inspired by the work of **Marcos López de Prado**, this framework moves beyond "what moves together" to "what causes what." By extracting a **Directed Acyclic Graph (DAG)** from 100 assets, we identify the underlying structural drivers of the market.
 
 ### 🧠 Why This Matters
 Financial markets are not just sets of numbers; they are complex, adaptive systems with a hidden hierarchy. 
@@ -22,26 +22,29 @@ Financial markets are not just sets of numbers; they are complex, adaptive syste
 
 ### Research Procedure: Causal-Inference Based Portfolio Optimization
 
-#### Phase 1: Adaptive Data Preprocessing & Statistical Denoising
-To extract genuine causal signals from noisy financial time series, we implement a memory-preserving stationarity transformation followed by spectral filtering.
+#### Phase 1: Adaptive Data Preprocessing & Memory Preservation
+To extract genuine causal signals while preserving the predictive power of financial time series, we implement a memory-preserving stationarity transformation.
 
-* **Global Fractional Differentiation**: Instead of simple integer differencing, we apply fractional differentiation to maintain long-term memory while ensuring stationarity. To maintain cross-sectional consistency, we compute the optimal $d$ for each asset and select the **95th percentile value** to be applied across the entire universe:
+* **Global Fractional Differentiation**: To overcome the stationarity-memory trade-off of integer differencing, we apply fractional differentiation. For cross-sectional consistency across the 1,000+ asset universe, we compute the optimal $d$ for each asset and apply the **95th percentile value** globally:
 
 $$\Delta^d P_t = \sum_{k=0}^{\infty} \binom{d}{k} (-1)^k P_{t-k}$$
 
-* **Spectral Matrix Cleaning (Denoising & Detoning)**: We transform the Variation of Information (VI) distance into a similarity matrix ($S = 1 - D$). This matrix undergoes a two-stage refinement:
-1.  **Marchenko-Pastur Denoising**: We filter the eigenvalues $\lambda$ of the correlation matrix that fall within the "noise" band defined by the theoretical threshold:
+![fracdiff.png](images/fracdiff.png)
 
-$$\lambda_{max} = \sigma^2 (1 + \sqrt{\gamma})^2, \quad \text{where } \gamma = N/T$$
+#### Phase 2: Information-Theoretic Topology & Robustness
+Traditional Pearson correlation often misses non-linear dependencies and assumes Gaussian distributions. We utilize Information Theory to map the non-linear topology of the market.
 
-2.  **Detoning**: We remove the first principal component (the "Market Tone") to prevent common market-wide fluctuations from distorting the underlying cluster structures and causal discovery.
+* **Normalized Variation of Information (NVI)**: We compute a true metric distance based on Mutual Information $I(X; Y)$. Unlike correlation, VI is invariant to monotonic transformations and captures complex non-linear associations:
 
-#### Phase 2: Information-Theoretic Hierarchical Structuring
-Traditional Pearson correlation often misses non-linear dependencies. We utilize Information Theory to map the topology of the 1,000+ asset universe.
+$$d(X, Y) = 1 - \frac{I(X; Y)}{H(X, Y)}$$
 
-* **Variation of Information (VI)**: We calculate a true metric distance based on Mutual Information $I(X; Y)$, which captures non-linear associations that standard correlation ignores:
+![nmi_origin.png](images/nmi_origin.png)
+  
+* **Distance Matrix Regularization (Denoising)**: Since the NVI matrix does not follow the Wishart distribution required for standard Marchenko-Pastur denoising, we apply **Graph-based Regularization** (e.g., Thresholding or Shrinkage). This filters out spurious information and ensures the matrix is Positive Semi-Definite (PSD) while preserving the metric properties (triangle inequality) of the distance measure.
 
-$$d(X, Y) = \sqrt{1 - \frac{I(X; Y)}{\max(H(X), H(Y))}}$$
+* **Manifold Detoning**: To prevent the "Market Tone" (the dominant first principal component) from obscuring the underlying causal clusters, we perform detoning on the similarity space ($S = 1 - d_{reg}$). This ensures that the subsequent allocation focuses on idiosyncratic cluster dynamics rather than beta-driven noise.
+
+![nmi_denoised.png](images/nmi_denoised.png)
 
 * **HCAA (Hierarchical Cluster Asset Allocation)**: Using the denoised and detoned similarity weights, assets are grouped into $K$ hierarchical clusters (typically $K \in [20, 50]$). This creates a recursive tree structure that serves as the backbone for the Causal Allocation, ensuring that capital is distributed across statistically independent risk factors rather than just individual tickers.
 
@@ -50,6 +53,8 @@ To reduce the dimensionality for the DAG search, we condense each cluster into a
 
 * **Cluster Representation**: For each cluster $C_k$, extract the subset of returns $R_{C_k}$.
 * **First Principal Component ($PC_1$)**: Extract the dominant signal that explains the maximum variance within the cluster:
+
+![clustered_fracdiff.png](images/clustered_fracdiff.png)
 
 $$Z_k = \mathbf{w}_1^T R_{C_k}$$
 
@@ -67,7 +72,20 @@ $$\min_{W} \frac{1}{2n} \|Z - ZW\|^2_F + \rho \|W\|_1 \quad \text{s.t. } \text{t
 
 $$Z_t = W_0^T Z_t + \sum_{\tau=1}^p W_\tau^T Z_{t-\tau} + \epsilon_t$$
 
-#### Phase 5: Causal Intervention (Do-calculus)
+#### Phase 5: Automated Causal Validation & Edge Pruning
+To handle the high-dimensional complexity of 1,000+ assets, we implement an automated validation pipeline that filters out spurious causal links using rigorous statistical tests.
+
+* **Automated Double Machine Learning (DML)**: For every edge $i \to j$ identified in the DAG, the system automatically executes a DML regressor. By treating all other relevant nodes as potential confounders $X$, it computes a debiased causal effect $\hat{\theta}_{i \to j}$:
+    1.  **Nuisance Parameter Estimation**: $E[Z_j | X]$ and $E[Z_i | X]$ are estimated via Cross-Validation.
+    2.  **Edge Pruning**: Any edge where the $p\text{-value}$ of $\hat{\theta}$ exceeds the significance threshold (e.g., $\alpha = 0.05$) is automatically pruned from the graph.
+
+* **Refutation & Sensitivity Testing**: The pipeline conducts automated "What-if" stress tests on the discovered DAG:
+    * **Placebo Test**: Replacing the treatment node with random noise to ensure the causal effect drops to zero.
+    * **Data Subsampling**: Checking the stability of edges across different time regimes to ensure the relationship is not a temporal artifact.
+
+* **Mediator-Confounder Separation**: The system automatically classifies nodes into **Mediators** or **Confounders** for any given pair, ensuring that the Do-calculus in Phase 6 does not suffer from "Bad Control" bias.
+
+#### Phase 6: Causal Intervention (Do-calculus)
 This step allows the manager to inject subjective views into the objective causal structure.
 
 * **Structural Intervention**: Apply the do-operator to node $j$ with value $v$: $do(Z_j = v)$.
@@ -78,7 +96,7 @@ $$\tilde{\mu}_{causal} = T \cdot \mathbf{v}_{view}$$
 
 * **Path Analysis**: Quantify how the intervention at the source node affects downstream assets over the investment horizon $H$.
 
-#### Phase 6: Optimization via Causal-HRP
+#### Phase 7: Optimization via Causal-HRP
 The final weights are calculated by merging the HRP risk-distribution with the causal-tilting logic.
 
 * **Recursive Bisection**: Split the cluster tree into left ($L$) and right ($R$) branches.
@@ -97,22 +115,13 @@ $$w_i = \prod_{n \in \text{path}(i)} \alpha_n^*$$
 
 ### 📚 Selected References
 
-#### Core Methodology: Financial Machine Learning
 * **López de Prado, M.** (2018). *Advances in Financial Machine Learning*. John Wiley & Sons.
 * **López de Prado, M.** (2020). *Machine Learning for Asset Managers*. Cambridge University Press.
 * **López de Prado, M.** (2016). "Building Differential Portfolios". *Journal of Risk*.
-
-#### Causal Discovery & Graphical Models
 * **Zheng, X., Aragam, B., Ravikumar, P. K., & Xing, E. P.** (2018). "DAGs with NO TEARS: Continuous Optimization for Structure Learning". *Advances in Neural Information Processing Systems (NeurIPS)*.
 * **Pearl, J.** (2009). *Causality: Models, Reasoning, and Inference*. Cambridge University Press.
 * **Peters, J., Janzing, D., & Schölkopf, B.** (2017). *Elements of Causal Inference: Foundations and Learning Algorithms*. MIT Press.
 * **Spirtes, P., Glymour, C. N., & Scheines, R.** (2000). *Causation, Prediction, and Search*. MIT Press.
-
-#### Information Theory & Robust Optimization
 * **Kraskov, A., Stögbauer, H., & Grassberger, P.** (2004). "Estimating Mutual Information". *Physical Review E*.
 * **Marti, G., Andler, S., Nielsen, F., & Donnat, P.** (2016). "Clustering Financial Time Series: New Insights from an Extended Survey". *arXiv preprint*.
 * **Laloux, L., Cizeau, P., Potters, M., & Bouchaud, J. P.** (2000). "Random Matrix Theory in Financial Analysis". *International Journal of Theoretical and Applied Finance*.
-
-#### Implementation & Frameworks
-* **Causal-learn Library**: *A Python Package for Causal Discovery*. [GitHub Repository](https://github.com/py-why/causal-learn).
-* **PyPortfolioOpt**: *Financial Portfolio Optimization in Python*. [Documentation](https://pyportfolioopt.readthedocs.io/).
