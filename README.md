@@ -92,7 +92,7 @@ This step allows the manager to inject subjective views into the objective causa
 * **Total Causal Effect**: Calculate the propagation of the shock using the transfer matrix $T$:
 
 $$T = (I - W_0^T)^{-1}$$
-$$\tilde{\mu}_{causal} = T \cdot \mathbf{v}_{view}$$
+$$\tilde{\mu}_{\text{causal}} = T \cdot \mathbf{v}_{\text{view}}$$
 
 * **Path Analysis**: Quantify how the intervention at the source node affects downstream assets over the investment horizon $H$.
 
@@ -102,7 +102,7 @@ The final weights are calculated by merging the HRP risk-distribution with the c
 * **Recursive Bisection**: Split the cluster tree into left ($L$) and right ($R$) branches.
 * **Causal Weight Tilting**: Adjust the allocation factor $\alpha$ based on the causal expected returns $\tilde{\mu}$:
 
-$$\alpha^* = \alpha_{IVP} \times \left( 1 + \lambda \frac{\tilde{\mu}_L - \tilde{\mu}_R}{|\tilde{\mu}_L| + |\tilde{\mu}_R|} \right)$$
+$$\alpha^* = \alpha_{\text{IVP}} \times \left( 1 + \lambda \frac{\tilde{\mu}_L - \tilde{\mu}_R}{|\tilde{\mu}_L| + |\tilde{\mu}_R|} \right)$$
 
 * **Final Allocation**: The weight for asset $i$ is the product of all adjusted factors along its path:
 
