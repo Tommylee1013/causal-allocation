@@ -60,53 +60,131 @@ $$Z_k = \mathbf{w}_1^T R_{C_k}$$
 
 $Z_k$ now serves as the representative time-series for the $k$-th causal node.
 
-#### Phase 4: Causal Discovery (DAG Construction)
-We identify the directional flow of information between the aggregated cluster nodes.
+#### Phase 4: Causal Discovery (Static DAG Construction with Structural Priors)
 
-* **NOTEARS (Non-combinatorial Optimization)**: Learn the adjacency matrix $W$ by solving:
+We identify the directional flow of information between macro factors and cluster-level latent return components.
 
-$$\min_{W} \frac{1}{2n} \|Z - ZW\|^2_F + \rho \|W\|_1 \quad \text{s.t. } \text{tr}(e^{W \circ W}) - K = 0$$
+* **DirectLiNGAM with Structural Priors**:  
+We estimate a static causal graph under non-Gaussian noise and linear SEM assumptions:
+
+$$
+Z = B^T Z + \epsilon, \quad \epsilon \perp Z
+$$
+
+where $B$ is a weighted adjacency matrix such that $B_{ij} \neq 0$ implies $j \rightarrow i$.
+
+![dag_origin.png](images/dag_origin.png)
+
+Structural priors are imposed to enforce economically consistent constraints:
+- No Cluster → Macro edges (macro factors are exogenous drivers)
+- Directional constraints on TBILL (e.g., others → TBILL forbidden to enforce TBILL as a policy-driven source variable)
+- Optional soft constraints among macro factors to prevent implausible feedback loops
+
+These priors are implemented via a prior-knowledge mask, which prunes the admissible edge space before LiNGAM estimation.
+
+* **Post-estimation Structural Regularization**:  
+To mitigate over-dense graphs induced by statistical noise, we apply top-k in-edge pruning:
+
+$$
+\mathcal{P}_k(j) = \text{Top-}k \{ |B_{ij}| : i \in \text{Parents}(j) \}
+$$
+
+Edges outside $\mathcal{P}_k(j)$ are removed to enforce economic sparsity and interpretability.
 
 
-* **Dynamic Extension**: Incorporate time-lagged effects to capture lead-lag relationships:
+#### Phase 5: Automated Causal Validation & Edge Pruning (DML-based Refinement)
 
-$$Z_t = W_0^T Z_t + \sum_{\tau=1}^p W_\tau^T Z_{t-\tau} + \epsilon_t$$
+To eliminate spurious causal links implied by LiNGAM, we construct an automated validation pipeline using Double Machine Learning (DML).
 
-#### Phase 5: Automated Causal Validation & Edge Pruning
-To handle the high-dimensional complexity of 1,000+ assets, we implement an automated validation pipeline that filters out spurious causal links using rigorous statistical tests.
+For every directed edge $i \rightarrow j$ in the estimated DAG:
 
-* **Automated Double Machine Learning (DML)**: For every edge $i \to j$ identified in the DAG, the system automatically executes a DML regressor. By treating all other relevant nodes as potential confounders $X$, it computes a debiased causal effect $\hat{\theta}_{i \to j}$:
-    1.  **Nuisance Parameter Estimation**: $E[Z_j | X]$ and $E[Z_i | X]$ are estimated via Cross-Validation.
-    2.  **Edge Pruning**: Any edge where the $p\text{-value}$ of $\hat{\theta}$ exceeds the significance threshold (e.g., $\alpha = 0.05$) is automatically pruned from the graph.
+* **DML-based Effect Estimation**
 
-* **Refutation & Sensitivity Testing**: The pipeline conducts automated "What-if" stress tests on the discovered DAG:
-    * **Placebo Test**: Replacing the treatment node with random noise to ensure the causal effect drops to zero.
-    * **Data Subsampling**: Checking the stability of edges across different time regimes to ensure the relationship is not a temporal artifact.
+$$
+Z_j = \theta_{i \to j} Z_i + f(X) + \varepsilon
+$$
 
-* **Mediator-Confounder Separation**: The system automatically classifies nodes into **Mediators** or **Confounders** for any given pair, ensuring that the Do-calculus in Phase 6 does not suffer from "Bad Control" bias.
+where $X$ consists of automatically identified confounders only  
+(colliders excluded; mediators optionally excluded for total effect estimation).
 
-#### Phase 6: Causal Intervention (Do-calculus)
-This step allows the manager to inject subjective views into the objective causal structure.
+Nuisance functions are estimated via cross-fitted machine learning models.
 
-* **Structural Intervention**: Apply the do-operator to node $j$ with value $v$: $do(Z_j = v)$.
-* **Total Causal Effect**: Calculate the propagation of the shock using the transfer matrix $T$:
+* **Edge Pruning Rule**
 
-$$T = (I - W_0^T)^{-1}$$
-$$\tilde{\mu}_{\text{causal}} = T \cdot \mathbf{v}_{\text{view}}$$
+$$
+\text{Keep edge } i \rightarrow j 
+\quad \text{iff} \quad 
+p(\hat{\theta}_{i \to j}) \le \alpha
+$$
 
-* **Path Analysis**: Quantify how the intervention at the source node affects downstream assets over the investment horizon $H$.
+![dag_pruning.png](images/dag_pruning.png)
 
-#### Phase 7: Optimization via Causal-HRP
-The final weights are calculated by merging the HRP risk-distribution with the causal-tilting logic.
+Edges failing statistical significance are removed from the causal graph.
 
-* **Recursive Bisection**: Split the cluster tree into left ($L$) and right ($R$) branches.
-* **Causal Weight Tilting**: Adjust the allocation factor $\alpha$ based on the causal expected returns $\tilde{\mu}$:
+* **Stability Diagnostics (Lightweight)**  
+The pipeline performs:
+- rolling-window re-estimation stability checks  
+- pruning sensitivity tests under different sparsity thresholds  
 
-$$\alpha^* = \alpha_{\text{IVP}} \times \left( 1 + \lambda \frac{\tilde{\mu}_L - \tilde{\mu}_R}{|\tilde{\mu}_L| + |\tilde{\mu}_R|} \right)$$
+This guards against regime-specific or transient spurious causality.
 
-* **Final Allocation**: The weight for asset $i$ is the product of all adjusted factors along its path:
 
-$$w_i = \prod_{n \in \text{path}(i)} \alpha_n^*$$
+#### Phase 6: Causal Intervention (Do-calculus on Structural Graph)
+
+![weight_causal.png](images/weight_causal.png)
+
+This step integrates analyst views into the objective causal structure via structural interventions.
+
+* **Structural Intervention**
+
+$$
+do(Z_j = v)
+$$
+
+* **Linear Propagation of Shocks**
+
+$$
+Z = (I - B^T)^{-1} \epsilon
+$$
+
+$$
+T = (I - B^T)^{-1}
+$$
+
+$$
+\tilde{\mu}_{\text{causal}} = T \cdot \mathbf{v}_{\text{view}}
+$$
+
+This yields cluster-level and asset-level causal return tilts implied by the analyst’s macro scenario.
+
+* **Path Decomposition (Optional Diagnostics)**  
+We optionally decompose the propagation into dominant causal paths to interpret which macro-to-cluster channels transmit the shock.
+
+
+#### Phase 7: Portfolio Optimization via Causal-HRP / Causal-NCO Hybrid
+
+The final allocation integrates:
+
+1. **Risk Allocation Backbone (HRP / NCO)**  
+Baseline cluster and asset-level risk allocation using HRP or NCO.
+
+2. **Causal Tilting Layer**
+
+$$
+\tilde{\mu}_c = \sum_{j \in \text{Macro}} T_{cj} v_j
+$$
+
+$$
+w_c^* \propto w_c^{\text{risk}} \cdot (1 + \lambda \cdot \tilde{\mu}_c)
+$$
+
+3. **Intra-cluster NCO Refinement**
+
+Final asset weight:
+
+$$
+w_i = w_{c(i)}^* \cdot w_{i|c(i)}^{\text{NCO}}
+$$
 
 ### 🏷️ Keywords
 `Causal Inference` · `Directed Acyclic Graphs (DAG)` · `Hierarchical Risk Parity (HRP)` · `Information Theory` · `Mutual Information` · `Machine Learning for Finance` · `Structural Causal Models (SCM)` · `Portfolio Optimization` · `NOTEARS Algorithm` · `Denoising` · `Marchenko-Pastur Law`
