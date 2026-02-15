@@ -31,22 +31,48 @@ $$\Delta^d P_t = \sum_{k=0}^{\infty} \binom{d}{k} (-1)^k P_{t-k}$$
 
 ![fracdiff.png](images/fracdiff.png)
 
-#### Phase 2: Information-Theoretic Topology & Robustness
-Traditional Pearson correlation often misses non-linear dependencies and assumes Gaussian distributions. We utilize Information Theory to map the non-linear topology of the market.
+#### Phase 2: Information-Theoretic Topology & Robustness (Denoising & Detoning without MP)
 
-* **Normalized Variation of Information (NVI)**: We compute a true metric distance based on Mutual Information $I(X; Y)$. Unlike correlation, VI is invariant to monotonic transformations and captures complex non-linear associations:
+Traditional Pearson correlation assumes linear dependence and Gaussianity, which are violated in financial time series with regime shifts, tail dependence, and non-linear co-movements. We therefore construct the market topology using Information-Theoretic distances.
 
-$$d(X, Y) = 1 - \frac{I(X; Y)}{H(X, Y)}$$
+* **Normalized Variation of Information (NVI)**  
+We compute a metric distance based on Mutual Information $I(X; Y)$:
+
+$$
+d(X, Y) = 1 - \frac{I(X; Y)}{H(X, Y)}
+$$
+
+This distance:
+- captures non-linear dependencies,
+- is invariant to monotonic transformations,
+- satisfies the triangle inequality,
+- and provides a geometry on the space of asset return distributions.
 
 ![nmi_origin.png](images/nmi_origin.png)
-  
-* **Distance Matrix Regularization (Denoising)**: Since the NVI matrix does not follow the Wishart distribution required for standard Marchenko-Pastur denoising, we apply **Graph-based Regularization** (e.g., Thresholding or Shrinkage). This filters out spurious information and ensures the matrix is Positive Semi-Definite (PSD) while preserving the metric properties (triangle inequality) of the distance measure.
 
-* **Manifold Detoning**: To prevent the "Market Tone" (the dominant first principal component) from obscuring the underlying causal clusters, we perform detoning on the similarity space ($S = 1 - d_{reg}$). This ensures that the subsequent allocation focuses on idiosyncratic cluster dynamics rather than beta-driven noise.
+* **Graph-based Regularization (Denoising without Marchenko–Pastur)**  
+Since the NVI distance matrix does not follow the Wishart eigenvalue distribution required for standard Random Matrix Theory (Marchenko–Pastur) denoising, we apply a topology-preserving regularization:
+
+- **k-Nearest Neighbor (k-NN) filtering / thresholding** to remove weak, noise-driven links  
+- **Graph Laplacian smoothing or shrinkage** to enforce positive semi-definiteness  
+- **Spectral clipping** on the similarity matrix $S = 1 - d(X,Y)$  
+
+This procedure suppresses spurious dependencies while preserving:
+- metric consistency,
+- topological neighborhood relations,
+- and cluster separability.
+
+* **Manifold Detoning (Market Mode Removal in Similarity Space)**  
+To prevent the dominant "market mode" (first principal component) from collapsing the geometry into a single beta-driven factor, we perform detoning directly on the similarity manifold:
+
+$$
+S = 1 - d_{\text{reg}}(X,Y)
+$$
+
+We remove the first eigencomponent of $S$ and renormalize the residual similarity matrix.  
+This ensures that subsequent clustering and causal discovery focus on **idiosyncratic inter-cluster dynamics** rather than global risk-on / risk-off effects.
 
 ![nmi_denoised.png](images/nmi_denoised.png)
-
-* **HCAA (Hierarchical Cluster Asset Allocation)**: Using the denoised and detoned similarity weights, assets are grouped into $K$ hierarchical clusters (typically $K \in [20, 50]$). This creates a recursive tree structure that serves as the backbone for the Causal Allocation, ensuring that capital is distributed across statistically independent risk factors rather than just individual tickers.
 
 #### Phase 3: Node Aggregation via Cluster-PCA
 To reduce the dimensionality for the DAG search, we condense each cluster into a single "Latent Causal Node."
@@ -128,8 +154,55 @@ The pipeline performs:
 
 This guards against regime-specific or transient spurious causality.
 
+#### Phase 6: LLM-based Macro Forecasting with RAG Filtering (Analyst View Generation)
 
-#### Phase 6: Causal Intervention (Do-calculus on Structural Graph)
+Before performing causal intervention, we generate forward-looking macro views using an LLM and optionally filter them through a retrieval-augmented validation layer. This step operationalizes analyst-style subjective views in a systematic and reproducible manner.
+
+* **Monthly Macro Forecast Generation (LLM)**  
+At each month-end rebalancing date, we generate 1-month-ahead conditional forecasts for each macro node using an LLM:
+
+$$
+v_j(t+1) = \text{LLM}\Big( \text{MacroHistory}_j(1{:}t), \ \text{SPX}(1{:}t) \Big)
+$$
+
+Each forecast returns:
+- A continuous numeric expectation $v_j(t+1)$  
+- A confidence score $c_j(t+1) \in [0, 1]$  
+- A short textual rationale (stored for auditability)
+
+* **RAG-based View Validation (Optional Gatekeeper)**  
+Generated views are optionally passed through a retrieval-augmented validation layer that checks consistency against:
+
+- Recent macro releases  
+- Market narratives (e.g., Fed guidance, inflation regime shifts)  
+- Historical analog regimes  
+
+The validation model outputs an acceptance probability:
+
+$$
+\pi_j(t+1) = \text{RAG}\Big(v_j(t+1), \ \mathcal{D}_{\text{macro}}(t)\Big)
+$$
+
+Views with low $\pi_j(t+1)$ can be:
+- down-weighted,
+- clipped, or
+- discarded before causal intervention.
+
+* **Confidence-weighted View Vector**
+
+The final intervention vector is constructed as:
+
+$$
+\mathbf{v}_{\text{view}}(t+1)
+= \Big( c_1 \pi_1 v_1, \; c_2 \pi_2 v_2, \; \dots, \; c_K \pi_K v_K \Big)^\top
+$$
+
+This produces a disciplined analyst-view vector that feeds into the causal intervention step.
+
+---
+
+
+#### Phase 7: Causal Intervention (Do-calculus on Structural Graph)
 
 ![weight_causal.png](images/weight_causal.png)
 
@@ -161,7 +234,7 @@ This yields cluster-level and asset-level causal return tilts implied by the ana
 We optionally decompose the propagation into dominant causal paths to interpret which macro-to-cluster channels transmit the shock.
 
 
-#### Phase 7: Portfolio Optimization via Causal-HRP / Causal-NCO Hybrid
+#### Phase 8: Portfolio Optimization via Causal-HRP / Causal-NCO Hybrid
 
 The final allocation integrates:
 
@@ -191,15 +264,64 @@ $$
 
 ---
 
-### 📚 Selected References
+### 📚 References
 
-* **López de Prado, M.** (2018). *Advances in Financial Machine Learning*. John Wiley & Sons.
-* **López de Prado, M.** (2020). *Machine Learning for Asset Managers*. Cambridge University Press.
-* **López de Prado, M.** (2016). "Building Differential Portfolios". *Journal of Risk*.
-* **Zheng, X., Aragam, B., Ravikumar, P. K., & Xing, E. P.** (2018). "DAGs with NO TEARS: Continuous Optimization for Structure Learning". *Advances in Neural Information Processing Systems (NeurIPS)*.
-* **Pearl, J.** (2009). *Causality: Models, Reasoning, and Inference*. Cambridge University Press.
-* **Peters, J., Janzing, D., & Schölkopf, B.** (2017). *Elements of Causal Inference: Foundations and Learning Algorithms*. MIT Press.
-* **Spirtes, P., Glymour, C. N., & Scheines, R.** (2000). *Causation, Prediction, and Search*. MIT Press.
-* **Kraskov, A., Stögbauer, H., & Grassberger, P.** (2004). "Estimating Mutual Information". *Physical Review E*.
-* **Marti, G., Andler, S., Nielsen, F., & Donnat, P.** (2016). "Clustering Financial Time Series: New Insights from an Extended Survey". *arXiv preprint*.
-* **Laloux, L., Cizeau, P., Potters, M., & Bouchaud, J. P.** (2000). "Random Matrix Theory in Financial Analysis". *International Journal of Theoretical and Applied Finance*.
+* **López de Prado, M.** (2018). *Advances in Financial Machine Learning*. John Wiley & Sons.  
+  — Event-based sampling, HRP/NCO, denoising, and structural portfolio construction backbone.
+
+* **López de Prado, M.** (2020). *Machine Learning for Asset Managers*. Cambridge University Press.  
+  — Hierarchical allocation, bet sizing, and production-oriented ML pipeline for portfolio construction.
+
+* **López de Prado, M.** (2016). "Building Diversified Portfolios that Outperform Out of Sample". *Journal of Risk*.  
+  — Hierarchical clustering-based allocation logic (HRP) used as the risk backbone of the causal allocation layer.
+
+* **Zheng, X., Aragam, B., Ravikumar, P. K., & Xing, E. P.** (2018).  
+  "DAGs with NO TEARS: Continuous Optimization for Structure Learning". *NeurIPS*.  
+  — Continuous optimization framework for DAG discovery; conceptual foundation for causal graph learning.
+
+* **Shimizu, S., Hoyer, P. O., Hyvärinen, A., & Kerminen, A.** (2006).  
+  "A Linear Non-Gaussian Acyclic Model for Causal Discovery (LiNGAM)". *Journal of Machine Learning Research*.  
+  — Core causal discovery model used for static DAG estimation in the proposed causal allocation pipeline.
+
+* **Pearl, J.** (2009). *Causality: Models, Reasoning, and Inference*. Cambridge University Press.  
+  — Do-calculus and structural intervention framework for translating analyst views into causal shocks.
+
+* **Peters, J., Janzing, D., & Schölkopf, B.** (2017).  
+  *Elements of Causal Inference: Foundations and Learning Algorithms*. MIT Press.  
+  — Theoretical grounding for causal discovery, intervention, and invariance-based reasoning.
+
+* **Spirtes, P., Glymour, C. N., & Scheines, R.** (2000).  
+  *Causation, Prediction, and Search*. MIT Press.  
+  — Constraint-based causal discovery foundations (PC, conditional independence testing) informing causal validation logic.
+
+* **Chernozhukov, V., Chetverikov, D., Demirer, M., Duflo, E., Hansen, C., Newey, W., & Robins, J.** (2018).  
+  "Double/Debiased Machine Learning for Treatment and Structural Parameters". *The Econometrics Journal*.  
+  — Statistical foundation of the automated DML-based causal edge validation and pruning layer.
+
+* **Kraskov, A., Stögbauer, H., & Grassberger, P.** (2004).  
+  "Estimating Mutual Information". *Physical Review E*.  
+  — Nonlinear dependence estimation used for exploratory screening and robustness diagnostics in factor relationships.
+
+* **Marti, G., Andler, S., Nielsen, F., & Donnat, P.** (2016).  
+  "Clustering Financial Time Series: New Insights from an Extended Survey". *arXiv preprint*.  
+  — Time-series clustering and correlation-distance frameworks for cluster construction prior to causal modeling.
+
+* **Laloux, L., Cizeau, P., Potters, M., & Bouchaud, J. P.** (2000).  
+  "Random Matrix Theory in Financial Analysis". *International Journal of Theoretical and Applied Finance*.  
+  — Eigenvalue denoising and covariance cleaning used for HRP/NCO stability and noise suppression.
+
+* **Rasmussen, C. E., & Williams, C. K. I.** (2006).  
+  *Gaussian Processes for Machine Learning*. MIT Press.  
+  — Regime uncertainty modeling and robustness checks for macro-driven conditional forecasts.
+
+* **Lewis, P., Perez, E., Piktus, A., et al.** (2020).  
+  "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks". *NeurIPS*.  
+  — Conceptual foundation of the RAG-based macro view validation layer for filtering LLM-generated forecasts.
+
+* **Bommasani, R., et al.** (2021).  
+  "On the Opportunities and Risks of Foundation Models". *Stanford CRFM Report*.  
+  — Theoretical grounding for LLM-based macro forecasting and analyst-view automation under governance constraints.
+
+* **Cover, T. M., & Thomas, J. A.** (2006). *Elements of Information Theory*. Wiley.
+* **Kraskov, A., Stögbauer, H., & Grassberger, P.** (2004). "Estimating Mutual Information". Physical Review E.
+* **Vidal, R., Ma, Y., & Sastry, S.** (2016). *Generalized Principal Component Analysis*. Springer.
