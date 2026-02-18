@@ -91,3 +91,82 @@ def calculate_discrete_mi_matrix(df, bins=10):
 
     return pd.DataFrame(dist_matrix, index=df.columns, columns=df.columns)
 
+def dist_from_corr(corr: pd.DataFrame) -> pd.DataFrame:
+    # Prado distance
+    d = np.sqrt(0.5 * (1.0 - corr))
+    return d
+
+def quasi_diag(linkage: np.ndarray) -> list[int]:
+    """HRP quasi-diagonalization: SciPy 없이 linkage 행렬을 직접 다룸.
+    linkage: (n-1) x 4 (i, j, dist, count)
+    """
+    linkage = linkage.astype(int)
+    n = linkage.shape[0] + 1
+    # 마지막 merge의 cluster id는 n + (n-2)
+    sort_ix = [n + linkage.shape[0] - 1]
+
+    def _children(k):
+        if k < n:
+            return [k]
+        i, j = linkage[k - n, 0], linkage[k - n, 1]
+        return _children(i) + _children(j)
+
+    return _children(sort_ix[0])
+
+def single_linkage_from_dist(D: np.ndarray) -> np.ndarray:
+    """linkage 유사 구조.
+    (정교한 clustering이 아니라 HRP ordering용으로만 사용)
+    """
+    n = D.shape[0]
+    # Kruskal 스타일로 MST 만든 뒤 merge 기록(단순화)
+    edges = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            edges.append((D[i, j], i, j))
+    edges.sort(key=lambda x: x[0])
+
+    parent = list(range(n))
+    size = [1] * n
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra == rb:
+            return False, ra
+        if size[ra] < size[rb]:
+            ra, rb = rb, ra
+        parent[rb] = ra
+        size[ra] += size[rb]
+        return True, ra
+
+    # linkage rows: [i, j, dist, new_count]
+    linkage = []
+    next_cluster_id = n
+    # 클러스터 대표 id를 유지하기 위해 map
+    rep = {i: i for i in range(n)}
+    cnt = {i: 1 for i in range(n)}
+
+    for dist, i, j in edges:
+        ri, rj = find(i), find(j)
+        if ri == rj:
+            continue
+        # merge
+        ci, cj = rep[ri], rep[rj]
+        new_count = cnt[ri] + cnt[rj]
+        linkage.append([ci, cj, float(dist), float(new_count)])
+
+        ok, rnew = union(ri, rj)
+        # 새 클러스터 id 할당
+        rep[rnew] = next_cluster_id
+        cnt[rnew] = new_count
+        next_cluster_id += 1
+
+        if len(linkage) == n - 1:
+            break
+
+    return np.array(linkage, dtype=float)
